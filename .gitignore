@@ -1,0 +1,55 @@
+# Hidden directories
+.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+pip-wheel-metadata/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+
+# Output / data
+*.nc
+*.h5
+*.hdf5
+*.pkl
+*.npy
+*.npz
+*.csv
+*.log
+output/
+results/
+
+# Plots
+*.png
+*.pdf
+*.svg
