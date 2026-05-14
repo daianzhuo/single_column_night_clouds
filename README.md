@@ -133,6 +133,86 @@ scm.py          — StratocumulusSCM integrator class
 run_scm.py      — CLI driver, output, optional plots
 ```
 
+## Known limitations
+
+Identified by a stress test (`test_stress.py`, 37 cases × 6 h each) sweeping SST, divergence, inversion strength, BL moisture, CCN, wind speed, and inversion height.
+
+### Valid operating range
+
+The model is calibrated for the marine stratocumulus regime:
+
+| Parameter | Calibrated range | Notes |
+|---|---|---|
+| SST | 285–300 K | Outside this range cloud persists but behaviour is unrealistic (see below) |
+| Large-scale divergence | 1–12 × 10⁻⁶ s⁻¹ | D > ~15 × 10⁻⁶ s⁻¹ dissipates the cloud |
+| BL total water | 9–13 g/kg | < ~8 g/kg: LCL rises above BL, no cloud forms |
+| Initial inversion height | 400–1500 m | < 400 m: BL too shallow; > 2000 m: microphysics overflows |
+| Inversion jump | 2–20 K | Δθ = 0 breaks the inversion-height detector |
+| Wind speed | 0.3–20 m/s | Neutral-stability bulk coefficients assumed throughout |
+| Nc | 5–2000 /cm³ | Full CCN range numerically stable (precipitation suppression effect captured) |
+
+### Regime limits (cloud dissipation)
+
+The following conditions produce a cloud-free column within 6 h:
+
+| Case | Cause |
+|---|---|
+| D > ~15 × 10⁻⁶ s⁻¹ | Subsidence compression overcomes LW-driven moistening |
+| qt_BL ≤ 7 g/kg | LCL is above the inversion — BL air cannot saturate |
+| zi_init ≤ 300 m | BL too shallow; no room for a Sc layer to establish |
+| Warm SST + dry BL (SST=298 K, qt=5 g/kg) | Combined: moisture too low and SST-driven LHF cannot compensate |
+
+### Numerical limits
+
+| Issue | Trigger | Symptom |
+|---|---|---|
+| **Precipitation overflow** | zi_init ≥ ~2400 m (cloud depth > ~700 m) | `precip_rate` → 10⁷⁰ mm/hr; T and qv remain finite. Root cause: the Marshall-Palmer slope parameter `λ = (π ρ_w N₀ / ρ qr)^(1/4)` diverges as `qr → 0` over a very deep column, causing `Nr` to overflow in the accretion step. |
+
+### Physical design assumptions and their consequences
+
+1. **No shortwave radiation (nighttime only)**
+   SW is hardcoded to zero (`F_sw_toa = 0`). For SST ≥ 305 K the model produces *more* cloud as warm SST drives higher LHF → higher qt → more condensate. In reality, daytime SW would burn the cloud off; this model cannot simulate that transition.
+
+2. **No cloud-top entrainment instability (CTEI)**
+   Turbulent entrainment of warm, dry FT air at the inversion is parameterised only through the O'Brien K-profile. The model does not implement an explicit CTEI criterion (Randall 1980; Deardorff 1980), so it cannot represent the radiatively driven cloud dissolution that occurs when Δθ is very small or the cloud is very optically thick.
+
+3. **Inversion-height detector fails at Δθ = 0**
+   `find_inversion_height()` picks the level of maximum dθ/dz. With no inversion (Δθ = 0 K), it returns the model-top boundary (z ≈ 2900 m), causing the FT nudging and K-profile to use a spurious inversion height.
+
+4. **Slab-ocean thermal inertia limits SST response**
+   C_slab = ρ_ocean · cp_ocean · d_slab ≈ 4.1 × 10⁷ J/(m² K). A 100 W/m² forcing shift produces only ≈ 0.4 K SST change over 48 h, so SST-mediated cloud feedbacks develop slowly.
+
+5. **No horizontal advection or mesoscale organisation**
+   The column is closed to horizontal heat and moisture transport. Real Sc regions are maintained partly by cold advection off continents and by organised Sc-to-Cu transitions driven by SST gradients — none of which are represented.
+
+6. **Fixed neutral-stability surface-flux coefficients**
+   Cd = Ch = Cq = 1.1 × 10⁻³ at all wind speeds and stabilities. This overestimates heat exchange in near-calm conditions (u < 2 m/s) and may underestimate it in strongly stable BLs.
+
+### Stress-test outcome table
+
+Run `python3 test_stress.py` to reproduce. Each case is 6 model hours. Status: **STABLE** = cloud present and numerically healthy; *dissipated* = cloud lost; `precip_OVF` = precipitation rate overflow.
+
+| Case | Δ from baseline | Status | LWP_f (g/m²) | zi_f (m) |
+|---|---|---|---|---|
+| baseline | — | STABLE | 57 | 850 |
+| sst_280 | SST −12 K | STABLE | 313 | 850 |
+| sst_310 | SST +18 K | STABLE† | 209 | 850 |
+| div_10e-6 | D doubled | STABLE | 21 | 850 |
+| div_20e-6 | D × 4 | *dissipated* | 0 | 850 |
+| inv_0K | no inversion | STABLE‡ | 118 | 850 |
+| inv_25K | very strong inversion | STABLE | 13 | 850 |
+| qt_7g | dry BL | *dissipated* | 0 | 850 |
+| qt_16g | very moist BL | STABLE | 1012 | 800 |
+| Nc_5 | ultra-clean | STABLE | 41 | 850 |
+| Nc_2000 | heavily polluted | STABLE | 64 | 850 |
+| wind_25 | storm-force | STABLE | 251 | 850 |
+| zi_300 | shallow BL | *dissipated* | 0 | 300 |
+| zi_1500 | deep BL | STABLE | 631 | 1450 |
+| zi_2500 | near model top | `precip_OVF` | — | 2450 |
+
+† Physically unrealistic — no SW to burn cloud off.
+‡ Inversion-height detector returns spurious value.
+
 ## References
 
 - Gettelman & Morrison (2015), J. Climate — MG2 microphysics
